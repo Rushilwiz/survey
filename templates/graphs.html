@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Results{% endblock %}
+{% block body_class %}graphs{% endblock %}
+{% block content %}
+<main class="graphs-view">
+  <header class="graphs-head">
+    <div id="view-toggle" class="view-toggle" role="tablist" aria-label="Breakdown"></div>
+    <div id="view-n" class="view-n muted"></div>
+  </header>
+
+  <section class="slide">
+    <div class="q-head">
+      <div id="q-index" class="q-index muted"></div>
+      <h1 id="q-title" class="q-title"></h1>
+      <p id="q-note" class="q-note muted hidden">
+        Select all that apply — bars are % of each group, so they can total over 100%.
+      </p>
+    </div>
+    <div id="legend" class="legend hidden"></div>
+    <div id="chart" class="chart"></div>
+  </section>
+
+  <nav class="graph-nav">
+    <button type="button" id="prev" class="btn ghost">← Back</button>
+    <div id="dots" class="dots"></div>
+    <button type="button" id="next" class="btn">Next →</button>
+  </nav>
+</main>
+<script id="stats-data" type="application/json">{{ stats|tojson }}</script>
+<script src="{{ url_for('static', filename='graphs.js') }}"></script>
+{% endblock %}

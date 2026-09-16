@@ -7,7 +7,9 @@ services:
       - survey-data:/data
     environment:
       # Set this to require ?token=... on /export. Leave unset to keep it open.
-      EXPORT_TOKEN: ${EXPORT_TOKEN:-}
+      EXPORT_TOKEN: ${EXPORT_TOKEN:-token}
+      # Public URL the counter's QR code points at.
+      SURVEY_URL: ${SURVEY_URL:-https://survey.rushil.land}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",

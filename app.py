@@ -7,10 +7,15 @@ timestamp. Dedup is best-effort via a short-lived cookie holding that token.
 See PRD.md and docs/adr/0001-anonymity-and-best-effort-dedup.md.
 """
 
+import functools
+import io
 import os
 import sqlite3
 import uuid
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
+
+import segno
 
 from flask import (
     Flask, g, jsonify, make_response, render_template, request, Response,
@@ -20,6 +25,8 @@ DB_PATH = os.environ.get("SURVEY_DB", "survey.db")
 TOKEN_COOKIE = "survey_token"
 COOKIE_MAX_AGE = 2 * 60 * 60  # ~2 hours
 EXPORT_TOKEN = os.environ.get("EXPORT_TOKEN")  # if set, /export requires ?token=
+# Public address the projector QR points at; the counter also prints it.
+SURVEY_URL = os.environ.get("SURVEY_URL", "https://survey.rushil.land")
 
 PNA = "pna"  # "Prefer not to answer" slug, shared across questions
 
@@ -83,6 +90,7 @@ QUESTIONS = [
                  (PNA, "Prefer not to answer")]},
 ]
 Q_KEYS = [q["key"] for q in QUESTIONS]
+Q_BY_KEY = {q["key"]: q for q in QUESTIONS}
 ALLOWED = {q["key"]: {slug for slug, _ in q["options"]} for q in QUESTIONS}
 
 app = Flask(__name__)
@@ -203,11 +211,35 @@ def submit():
     return resp
 
 
+# --- projector QR ------------------------------------------------------------
+
+@functools.lru_cache(maxsize=4)
+def qr_svg(url):
+    """Inline SVG QR for `url`. Cached: the URL is fixed for the process.
+
+    Inlined rather than served as a file so the projector page needs no second
+    request, and sized by CSS via the viewBox (omitsize drops width/height).
+    """
+    buf = io.BytesIO()
+    segno.make(url, error="m").save(
+        buf, kind="svg", border=2, omitsize=True,
+        dark="#000", light="#fff", xmldecl=False, svgns=True,
+        svgclass=None, lineclass=None,
+    )
+    return buf.getvalue().decode()
+
+
+def display_url(url):
+    """`https://survey.rushil.land/` -> `survey.rushil.land` for the readout."""
+    return url.split("://", 1)[-1].rstrip("/")
+
+
 @app.get("/counter")
 def counter():
     class_size = get_meta("class_size")
     return render_template(
-        "counter.html", count=count_submissions(), class_size=class_size
+        "counter.html", count=count_submissions(), class_size=class_size,
+        qr=qr_svg(SURVEY_URL), survey_url=display_url(SURVEY_URL),
     )
 
 
@@ -227,9 +259,14 @@ def class_size():
                    class_size=int(raw) if raw.isdigit() else None)
 
 
+def token_ok():
+    """Gate for the read-everything surfaces (/export, /graphs)."""
+    return not EXPORT_TOKEN or request.args.get("token") == EXPORT_TOKEN
+
+
 @app.get("/export")
 def export():
-    if EXPORT_TOKEN and request.args.get("token") != EXPORT_TOKEN:
+    if not token_ok():
         return Response("forbidden", status=403, mimetype="text/plain")
     import csv
     import io
@@ -245,6 +282,73 @@ def export():
         buf.getvalue(), mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=survey.csv"},
     )
+
+
+# --- graphs ------------------------------------------------------------------
+
+# How the room can be sliced. `by` names the single-choice question whose
+# options become the series; None is the whole room as one series.
+GRAPH_VIEWS = [
+    {"key": "summary", "label": "Summary", "by": None},
+    {"key": "year", "label": "By year", "by": "q1"},
+    {"key": "major", "label": "Major vs not", "by": "q2"},
+]
+
+
+def build_stats():
+    """Aggregate the whole table into counts[view][group][slug].
+
+    One pass over the rows per question/view; the data set is one class, so
+    this is cheaper than the round trips a per-slice SQL query would cost.
+    Single-choice answers were coerced to a valid slug on write, so a row's
+    value is usable as a group key directly; q4 holds comma-joined slugs.
+    """
+    rows = get_db().execute(
+        f"SELECT {','.join(Q_KEYS)} FROM submissions"
+    ).fetchall()
+
+    views = []
+    for view in GRAPH_VIEWS:
+        by = view["by"]
+        defs = ([("all", "All responses")] if by is None
+                else list(Q_BY_KEY[by]["options"]))
+        sizes = Counter("all" if by is None else (r[by] or "") for r in rows)
+        # Drop empty groups: an absent year is a series nobody can read.
+        views.append({
+            "key": view["key"], "label": view["label"],
+            "groups": [{"key": k, "label": label, "n": sizes[k]}
+                       for k, label in defs if sizes[k]],
+        })
+
+    questions = []
+    for q in QUESTIONS:
+        key = q["key"]
+        per_view = {}
+        for view in GRAPH_VIEWS:
+            by = view["by"]
+            tally = defaultdict(Counter)
+            for r in rows:
+                gkey = "all" if by is None else (r[by] or "")
+                value = r[key] or ""
+                for slug in (value.split(",") if q["multi"] else [value]):
+                    if slug in ALLOWED[key]:
+                        tally[gkey][slug] += 1
+            per_view[view["key"]] = {g: dict(c) for g, c in tally.items()}
+        questions.append({
+            "key": key, "text": q["text"], "multi": q["multi"],
+            "options": [{"slug": slug, "label": label}
+                        for slug, label in q["options"]],
+            "counts": per_view,
+        })
+
+    return {"total": len(rows), "views": views, "questions": questions}
+
+
+@app.get("/graphs")
+def graphs():
+    if not token_ok():
+        return Response("forbidden", status=403, mimetype="text/plain")
+    return render_template("graphs.html", stats=build_stats())
 
 
 # Ensure the schema exists on import (safe: CREATE TABLE IF NOT EXISTS).

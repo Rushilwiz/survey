@@ -17,6 +17,10 @@
       <button type="submit" class="btn primary">Set</button>
     </form>
   </div>
+  <div class="qr-block">
+    <div class="qr">{{ qr|safe }}</div>
+    <div class="qr-url">{{ survey_url }}</div>
+  </div>
   <div class="counter-footer">
     <span class="muted">submissions</span>
     <button type="button" id="edit-size" class="linkish{{ ' hidden' if not class_size else '' }}">

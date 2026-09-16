@@ -1,3 +1,4 @@
 Flask>=3.0
+segno>=1.6          # pure-python QR for the projector counter
 # Optional for production serving:
 gunicorn>=21
