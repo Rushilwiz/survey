@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Counter{% endblock %}
+{% block body_class %}counter{% endblock %}
+{% block content %}
+<main class="counter-view">
+  <div id="count-wrap">
+    <div id="count" class="count">{{ count }}</div>
+    <div id="denom" class="denom{{ '' if class_size else ' hidden' }}">
+      / <span id="class-size">{{ class_size or '' }}</span>
+    </div>
+  </div>
+  <div id="setup" class="setup{{ ' hidden' if class_size else '' }}">
+    <form id="class-size-form">
+      <label for="cs-input">Class size (optional)</label>
+      <input id="cs-input" name="class_size" type="number" min="1" inputmode="numeric"
+             placeholder="e.g. 30" value="{{ class_size or '' }}">
+      <button type="submit" class="btn primary">Set</button>
+    </form>
+  </div>
+  <div class="counter-footer">
+    <span class="muted">submissions</span>
+    <button type="button" id="edit-size" class="linkish{{ ' hidden' if not class_size else '' }}">
+      edit class size
+    </button>
+  </div>
+</main>
+<script src="{{ url_for('static', filename='counter.js') }}"></script>
+{% endblock %}

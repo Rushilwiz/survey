@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}AI Use Survey{% endblock %}
+{% block content %}
+<main id="survey-app" class="survey">
+  <form id="survey-form" method="post" action="{{ url_for('submit') }}"
+        hx-post="{{ url_for('submit') }}"
+        hx-target="#survey-app" hx-swap="outerHTML">
+
+    <header class="progress" aria-live="polite">
+      <div class="progress-bar"><span id="progress-fill"></span></div>
+      <span id="progress-text" class="progress-text"></span>
+    </header>
+
+    {% for q in questions %}
+    <fieldset class="step" data-step="{{ loop.index0 }}"
+              data-multi="{{ '1' if q.multi else '0' }}" hidden>
+      <legend class="q-text">{{ q.text }}</legend>
+      <div class="options">
+        {% for slug, label in q.options %}
+        <label class="option{{ ' pna' if slug == 'pna' else '' }}">
+          <input type="{{ 'checkbox' if q.multi else 'radio' }}"
+                 name="{{ q.key }}" value="{{ slug }}">
+          <span>{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+
+    <fieldset class="step" data-step="{{ questions|length }}" data-comments="1" hidden>
+      <legend class="q-text">Any comments? <span class="muted">(optional)</span></legend>
+      <textarea name="comments" rows="5" placeholder="Optional — leave blank to skip"></textarea>
+    </fieldset>
+
+    <nav class="controls">
+      <button type="button" id="back" class="btn ghost">Back</button>
+      <button type="button" id="next" class="btn">Next</button>
+      <button type="submit" id="submit" class="btn primary" hidden>Submit</button>
+    </nav>
+
+    <noscript>
+      <p class="muted">JavaScript is off — all questions are shown; scroll down and Submit.</p>
+    </noscript>
+  </form>
+</main>
+<script src="{{ url_for('static', filename='survey.js') }}"></script>
+{% endblock %}
