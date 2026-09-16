@@ -1,0 +1,21 @@
+services:
+  survey:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - survey-data:/data
+    environment:
+      # Set this to require ?token=... on /export. Leave unset to keep it open.
+      EXPORT_TOKEN: ${EXPORT_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/count')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  survey-data:
